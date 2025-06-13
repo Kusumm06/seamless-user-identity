@@ -1,19 +1,28 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const Auth = () => {
+  const { user, signIn, signUp, loading } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const [loginData, setLoginData] = useState({
     email: '',
     password: ''
   });
+  
   const [signupData, setSignupData] = useState({
     name: '',
     email: '',
@@ -22,21 +31,116 @@ const Auth = () => {
     confirmPassword: ''
   });
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      navigate('/dashboard');
+    }
+  }, [user, loading, navigate]);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login data:', loginData);
-    // TODO: Connect to Supabase authentication
+    setIsSubmitting(true);
+    
+    try {
+      const { error } = await signIn(loginData.email, loginData.password);
+      
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description: error.message || "Invalid email or password. Please try again.",
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "You have been successfully logged in.",
+        });
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: "An unexpected error occurred. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (signupData.password !== signupData.confirmPassword) {
-      alert('Passwords do not match!');
+      toast({
+        variant: "destructive",
+        title: "Passwords don't match",
+        description: "Please make sure your passwords match and try again.",
+      });
       return;
     }
-    console.log('Signup data:', signupData);
-    // TODO: Connect to Supabase authentication
+
+    if (signupData.password.length < 6) {
+      toast({
+        variant: "destructive",
+        title: "Password too short",
+        description: "Password must be at least 6 characters long.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const { error } = await signUp(
+        signupData.email,
+        signupData.password,
+        signupData.name,
+        signupData.phone
+      );
+      
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Registration failed",
+          description: error.message || "Failed to create account. Please try again.",
+        });
+      } else {
+        toast({
+          title: "Account created successfully!",
+          description: "Please check your email to verify your account.",
+        });
+        // Reset form
+        setSignupData({
+          name: '',
+          email: '',
+          phone: '',
+          password: '',
+          confirmPassword: ''
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Registration failed",
+        description: "An unexpected error occurred. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4">
@@ -68,6 +172,7 @@ const Auth = () => {
                       value={loginData.email}
                       onChange={(e) => setLoginData({...loginData, email: e.target.value})}
                       required
+                      disabled={isSubmitting}
                     />
                   </div>
                 </div>
@@ -82,6 +187,7 @@ const Auth = () => {
                       value={loginData.password}
                       onChange={(e) => setLoginData({...loginData, password: e.target.value})}
                       required
+                      disabled={isSubmitting}
                     />
                     <Button
                       type="button"
@@ -89,6 +195,7 @@ const Auth = () => {
                       size="sm"
                       className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
+                      disabled={isSubmitting}
                     >
                       {showPassword ? (
                         <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -99,8 +206,8 @@ const Auth = () => {
                   </div>
                 </div>
                 
-                <Button type="submit" className="w-full">
-                  Sign In
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
             </TabsContent>
@@ -209,8 +316,8 @@ const Auth = () => {
                   </div>
                 </div>
                 
-                <Button type="submit" className="w-full">
-                  Create Account
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating account..." : "Create Account"}
                 </Button>
               </form>
             </TabsContent>
